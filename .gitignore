@@ -1,0 +1,8 @@
+# Build artifacts
+*.o
+tank_game
+
+# Editor/IDE clutter
+*.swp
+.DS_Store
+.vscode/
