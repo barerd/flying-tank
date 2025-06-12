@@ -1,14 +1,17 @@
 #include <SDL.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 #include <stdio.h>
 #include <stdbool.h>
-
 #include "entity.h"
 #include "tank.h"
 #include "car.h"
+#include "debug_text.h"
 
 #define WINDOW_WIDTH  1000
 #define WINDOW_HEIGHT 750
+
+TTF_Font* debug_font = NULL;
 
 int main() {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
@@ -48,6 +51,17 @@ int main() {
         SDL_DestroyRenderer(ren); SDL_DestroyWindow(win); SDL_Quit(); return 1;
     }
 
+    if (TTF_Init() != 0) {
+        SDL_Log("TTF_Init failed: %s", TTF_GetError());
+        return 1;
+    }
+
+    debug_font = TTF_OpenFont("assets/fonts/DejaVuSans.ttf", 16);
+    if (!debug_font) {
+        SDL_Log("Failed to load font: %s", TTF_GetError());
+        return 1;
+    }
+
     bool running = true;
     while (running) {
         SDL_Event e;
@@ -80,6 +94,8 @@ int main() {
         tank_render(ren, &tank, keystate);
 	car_render(ren, &car);
 
+	debug_draw_mount_info(ren, debug_font, &tank);
+		
         SDL_RenderPresent(ren);
         SDL_Delay(16);
     }
@@ -88,6 +104,8 @@ int main() {
     car_unload(&car);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
+    TTF_CloseFont(debug_font);
+    TTF_Quit();
     IMG_Quit();
     SDL_Quit();
     return 0;

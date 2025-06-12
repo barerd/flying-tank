@@ -5,13 +5,8 @@
 #include <stdbool.h>
 
 typedef struct {
-    float offset_x;
-    float offset_y;
-} Exhaust_Flame_Mount_Point;
-
-typedef struct {
     Entity base;
-    Exhaust_Flame_Mount_Point exhaust_mount;
+    MountPoint exhaust_mount;
   // More mounts can go here: e.g., turret_mount, missile_mount, etc.
 } Tank;
 
