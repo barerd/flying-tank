@@ -20,8 +20,8 @@ bool tank_load(SDL_Renderer* renderer, Tank* tank) {
     tank->base.accel = 0.3f;
     tank->base.friction = 0.05f;
 
-    tank->exhaust_mount.offset_x = 0;
-    tank->exhaust_mount.offset_y = 53;
+    tank->exhaust_mount.offset_x = -54;
+    tank->exhaust_mount.offset_y = 0;
 
     return true;
 }
@@ -41,15 +41,10 @@ void tank_update(Tank* tank, const Uint8* keystate) {
 
 void tank_render(SDL_Renderer* renderer, Tank* tank, const Uint8* keystate) {
     entity_render(renderer, &tank->base, 208, 208);
-    float angle_rad = tank->base.angle * (M_PI / 180.0f);
 
     if (keystate[SDL_SCANCODE_LEFT] || keystate[SDL_SCANCODE_RIGHT] || keystate[SDL_SCANCODE_UP]) {
-        float cos_a = cosf(angle_rad);
-        float sin_a = sinf(angle_rad);
-        float cx = tank->base.x + 208 / 2;
-        float cy = tank->base.y + 208 / 2;
-        float fx = cx + tank->exhaust_mount.offset_x * cos_a - tank->exhaust_mount.offset_y * sin_a;
-        float fy = cy + tank->exhaust_mount.offset_x * sin_a + tank->exhaust_mount.offset_y * cos_a;
+        float fx, fy;
+        mount_to_world_coords(&tank->base, &tank->exhaust_mount, &fx, &fy);
         flame_update(&exhaust_flame);
         flame_render(renderer, &exhaust_flame, fx, fy, tank->base.angle);
     }
