@@ -10,6 +10,7 @@
 
 #define WINDOW_WIDTH  1000
 #define WINDOW_HEIGHT 750
+#define FIXED_DT (1.0f / 60.0f)
 
 TTF_Font* debug_font = NULL;
 
@@ -51,16 +52,16 @@ int main() {
         SDL_DestroyRenderer(ren); SDL_DestroyWindow(win); SDL_Quit(); return 1;
     }
 
-    if (TTF_Init() != 0) {
-        SDL_Log("TTF_Init failed: %s", TTF_GetError());
-        return 1;
-    }
+    /* if (TTF_Init() != 0) { */
+    /*     SDL_Log("TTF_Init failed: %s", TTF_GetError()); */
+    /*     return 1; */
+    /* } */
 
-    debug_font = TTF_OpenFont("assets/fonts/DejaVuSans.ttf", 16);
-    if (!debug_font) {
-        SDL_Log("Failed to load font: %s", TTF_GetError());
-        return 1;
-    }
+    /* debug_font = TTF_OpenFont("assets/fonts/DejaVuSans.ttf", 16); */
+    /* if (!debug_font) { */
+    /*     SDL_Log("Failed to load font: %s", TTF_GetError()); */
+    /*     return 1; */
+    /* } */
 
     bool running = true;
     while (running) {
@@ -85,16 +86,16 @@ int main() {
         }
 	
 	const Uint8* keystate = SDL_GetKeyboardState(NULL);
-        tank_update(&tank, keystate);  // Controlled by player
+        tank_update(&tank, keystate, FIXED_DT);  // Controlled by player
         car_update(&car, keystate);    // Same controls for now
 
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         SDL_RenderClear(ren);
 
-        tank_render(ren, &tank, keystate);
+        tank_render(ren, &tank);
 	car_render(ren, &car);
 
-	debug_draw_mount_info(ren, debug_font, &tank);
+	// debug_draw_mount_info(ren, debug_font, &tank);
 		
         SDL_RenderPresent(ren);
         SDL_Delay(16);
@@ -104,8 +105,8 @@ int main() {
     car_unload(&car);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
-    TTF_CloseFont(debug_font);
-    TTF_Quit();
+    /* TTF_CloseFont(debug_font); */
+    /* TTF_Quit(); */
     IMG_Quit();
     SDL_Quit();
     return 0;

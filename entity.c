@@ -1,4 +1,5 @@
 #include "entity.h"
+#include "mount_system.h"
 #include <math.h>
 #include <SDL_image.h>
 
@@ -70,18 +71,22 @@ bool entity_check_collision(Entity* a, Entity* b, int w_a, int h_a, int w_b, int
 }
 
 void mount_to_world_coords(Entity* parent, MountPoint* mount, float* out_x, float* out_y) {
+    // Interpolate the offset from mount’s offset table
+    float offset_x, offset_y;
+    interpolate_mount_offset(mount, parent->angle, &offset_x, &offset_y);
+
     // Adjust angle to match sprite orientation - if your sprite points right at 0°, add 90°
     float angle_rad = (parent->angle + 90.0f) * (M_PI / 180.0f);
-    
+
     float center_x = parent->x;
     float center_y = parent->y;
-    
-    float forward = -mount->offset_x;  // forward = -X
-    float right   = mount->offset_y;   // right   = +Y
-    
+
+    float forward = -offset_x;  // forward = -X (assuming sprite points up)
+    float right   =  offset_y;  // right = +Y
+
     float rotated_dx = cosf(angle_rad) * forward - sinf(angle_rad) * right;
     float rotated_dy = sinf(angle_rad) * forward + cosf(angle_rad) * right;
-    
+
     *out_x = center_x + rotated_dx;
     *out_y = center_y + rotated_dy;
 }
