@@ -58,14 +58,14 @@ bool tank_load(SDL_Renderer* renderer, Tank* tank) {
     
     // 3. Create exhaust mount with lookup table
     MountOffset* exhaust_offsets = mount_create_offset_table(8);
-    mount_set_offset(exhaust_offsets, 0,   0.0f, -54,   0); // 0° - pointing up, exhaust below
-    mount_set_offset(exhaust_offsets, 1,  45.0f, -38,  38); // 45° - exhaust bottom-right
-    mount_set_offset(exhaust_offsets, 2,  90.0f,   0,  54); // 90° - pointing right, exhaust left
-    mount_set_offset(exhaust_offsets, 3, 135.0f,  38,  38); // 135°
-    mount_set_offset(exhaust_offsets, 4, 180.0f,  54,   0); // 180° - pointing down, exhaust above
-    mount_set_offset(exhaust_offsets, 5, 225.0f,  38, -38); // 225°
-    mount_set_offset(exhaust_offsets, 6, 270.0f,   0, -54); // 270° - pointing left, exhaust right
-    mount_set_offset(exhaust_offsets, 7, 315.0f, -38, -38); // 315°
+    mount_set_offset(exhaust_offsets, 0,   0.0f, 0, 65); // 0° - pointing up, exhaust below
+    mount_set_offset(exhaust_offsets, 1,  45.0f, 0, 70); // 45° - exhaust bottom-right
+    mount_set_offset(exhaust_offsets, 2,  90.0f, 0, 65); // 90° - pointing right, exhaust left
+    mount_set_offset(exhaust_offsets, 3, 135.0f, 0, 65); // 135°
+    mount_set_offset(exhaust_offsets, 4, 180.0f, 0, 60); // 180° - pointing down, exhaust above
+    mount_set_offset(exhaust_offsets, 5, 225.0f, 0, 65); // 225°
+    mount_set_offset(exhaust_offsets, 6, 270.0f, 0, 65); // 270° - pointing left, exhaust right
+    mount_set_offset(exhaust_offsets, 7, 315.0f, 0, 65); // 315°
     
     mount_add_point(&tank->base, "exhaust", exhaust_offsets, 8, true, 0.0f);
     
