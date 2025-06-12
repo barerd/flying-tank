@@ -2,17 +2,19 @@
 #define TANK_H
 
 #include "entity.h"
+#include "mount_system.h"
+#include <SDL.h>
 #include <stdbool.h>
 
 typedef struct {
     Entity base;
-    MountPoint exhaust_mount;
-  // More mounts can go here: e.g., turret_mount, missile_mount, etc.
+    MountedComponent* exhaust_flame;
+    bool thrusting;
 } Tank;
 
 bool tank_load(SDL_Renderer* renderer, Tank* tank);
-void tank_update(Tank* tank, const Uint8* keystate);
-void tank_render(SDL_Renderer* renderer, Tank* tank, const Uint8* keystate);
+void tank_update(Tank* tank, const Uint8* keystate, float dt);
+void tank_render(SDL_Renderer* renderer, Tank* tank);
 void tank_unload(Tank* tank);
 
 #endif

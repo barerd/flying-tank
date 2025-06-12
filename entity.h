@@ -3,23 +3,20 @@
 
 #include <SDL.h>
 #include <stdbool.h>
+#include "mount_system.h"
 
-typedef struct {
-    float x, y;           // Position
-    float angle;          // Rotation angle in degrees
-    float speed;          // Current speed
-    float max_speed;      // Max speed
-    float accel;          // Acceleration
-    float friction;       // Friction slowdown
-    int width;
-    int height;
-    SDL_Texture* texture; // Image
+typedef struct Entity {
+    float x, y;
+    float angle;
+    float speed, max_speed, accel, friction;      
+    int width, height;
+    SDL_Texture* texture;
+
+    // Mount system
+    MountPoint* mount_points;   // Array of mount points
+    int mount_count;            // Number of mount points
+    MountedComponent** mounted_components;  // Array of component lists (one per mount)
 } Entity;
-
-typedef struct {
-    float offset_x;
-    float offset_y;
-} MountPoint;
 
 // Lifecycle
 int  entity_load_texture(SDL_Renderer* renderer, Entity* e, const char* filepath);
@@ -33,8 +30,5 @@ bool entity_check_collision(Entity* a, Entity* b, int w_a, int h_a, int w_b, int
 
 // Render
 void entity_render(SDL_Renderer* renderer, const Entity* e, int width, int height);
-
-// MountPoint
-void mount_to_world_coords(Entity* parent, MountPoint* mount, float* out_x, float* out_y);
 
 #endif
