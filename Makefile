@@ -5,9 +5,9 @@ CFLAGS = -Wall -Wextra -std=c11 -O2 `sdl2-config --cflags` -I.
 LDFLAGS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf
 
 TARGET = tank_game
-SRCS = mount_system.c main.c tank.c car.c entity.c exhaust_flame.c
-OBJS = mount_system.o main.o tank.o car.o entity.o exhaust_flame.o
-HDRS = mount_system.h entity.h tank.h car.h exhaust_flame.h
+SRCS = mount_system.c main.c entity.c entity_spawn_animated.c entity_render_helpers.c behavior_helpers.c sdl_helpers.c mount_helpers.c
+OBJS = mount_system.o main.o entity.o entity_spawn_animated.o entity_render_helpers.o behavior_helpers.o sdl_helpers.o mount_helpers.o
+HDRS = mount_system.h entity.h entity_spawn_animated.h entity_render_helpers.h behavior_helpers.h sdl_helpers.c mount_helpers.h
 
 .PHONY: all clean
 

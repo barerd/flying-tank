@@ -1,113 +1,105 @@
 #include <SDL.h>
 #include <SDL_image.h>
-#include <SDL_ttf.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <math.h>
 #include "entity.h"
-#include "tank.h"
-#include "car.h"
-#include "debug_text.h"
+#include "mount_system.h"
+#include "entity_spawn_animated.h"
+#include "entity_render_helpers.h"
+#include "behavior_helpers.h"
+#include "sdl_helpers.h"
+#include "mount_helpers.h"
 
 #define WINDOW_WIDTH  1000
 #define WINDOW_HEIGHT 750
 #define FIXED_DT (1.0f / 60.0f)
 
-TTF_Font* debug_font = NULL;
-
 int main() {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
-        printf("SDL_Init Error: %s\n", SDL_GetError());
-        return 1;
-    }
+    SDL_Window* window = NULL;
+    SDL_Renderer* renderer = NULL;
+    if (!init_sdl(&window, &renderer, WINDOW_WIDTH, WINDOW_HEIGHT)) return 1;
 
-    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
-        printf("IMG_Init Error: %s\n", IMG_GetError());
-        SDL_Quit(); return 1;
-    }
+    Entity* entities[4];
+    int entity_count = 0;
 
-    SDL_Window* win = SDL_CreateWindow("Flying Tank", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    // ---- Tank Setup ----
+    REGISTER_ENTITY(tank, spawn_entity("tank1", renderer, "assets/tank.png", 100, 100));
+
+    // Initialize mount system for tank
+    mount_system_init(tank, 4);  // 4 mount points
+    // Added by Claude AI
+    mount_system_init_with_entities(tank, 0, 4);  // 4 entity mounts
+
+    // ---- Turret Setup ----
+    REGISTER_ENTITY(turret, spawn_entity("turret1", renderer, "assets/turret.png", 0, 0));
+    turret->is_animated = false;  // Make sure this flag exists
+    register_entity_mount_and_attach(tank, "main_weapon", 0, 40, 50, 0.0f, true, 0.0f, turret);
     
-    if (!win) {
-        printf("CreateWindow Error: %s\n", SDL_GetError());
-        SDL_Quit(); return 1;
-    }
-
-    SDL_Renderer* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!ren) {
-        SDL_DestroyWindow(win);
-        SDL_Quit(); return 1;
-    }
-
-    Tank tank;
-    if (!tank_load(ren, &tank)) {
-        printf("Failed to load tank.\n");
-        SDL_DestroyRenderer(ren); SDL_DestroyWindow(win);
-        SDL_Quit(); return 1;
-    }
-
-    Entity car;
-    if (!car_load(&car, ren)) {
-        printf("Failed to load car.\n");
-        tank_unload(&tank);
-        SDL_DestroyRenderer(ren); SDL_DestroyWindow(win); SDL_Quit(); return 1;
-    }
-
-    /* if (TTF_Init() != 0) { */
-    /*     SDL_Log("TTF_Init failed: %s", TTF_GetError()); */
-    /*     return 1; */
-    /* } */
-
-    /* debug_font = TTF_OpenFont("assets/fonts/DejaVuSans.ttf", 16); */
-    /* if (!debug_font) { */
-    /*     SDL_Log("Failed to load font: %s", TTF_GetError()); */
-    /*     return 1; */
-    /* } */
-
+    // Exhaust Flame Component
+    REGISTER_ANIMATED_ENTITY(flame, spawn_animated_entity("exhaust_flame", renderer, "assets/exhaust-flame", 4, 0, 0));
+    register_entity_mount_and_attach(tank, "exhaust_flame", 1, -90, 0, 0.0f, true, 0.0f, flame);
+    
+    // ---- Main Loop ----
     bool running = true;
+    bool turret_mounted = true;
+    bool turret_toggle_pressed = false;
+    float turret_remount_cooldown = 0.5f;  // in seconds
+    Uint32 last_time = SDL_GetTicks();
+
     while (running) {
         SDL_Event e;
-	while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT)
+	Uint32 now = SDL_GetTicks();
+        float delta_ms = now - last_time;
+        last_time = now;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT ||
+               (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
                 running = false;
-            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
-                running = false;
+            }
         }
 
-	if (entity_check_collision(&tank.base, &car, 208, 208, 25, 50)) {
-            printf("Tank collided with Car!\n");
+        const Uint8* keystate = SDL_GetKeyboardState(NULL);
+	apply_thrust_turn(tank, keystate, SDL_SCANCODE_UP, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, tank->accel, 180, FIXED_DT);
 
-            // Game logic decides the effect
-            tank.base.speed = 0;
-            car.speed = 0;
+        bool moving = keystate[SDL_SCANCODE_UP] || 
+                      keystate[SDL_SCANCODE_LEFT] || 
+                      keystate[SDL_SCANCODE_RIGHT];
 
-            // Or call an object-specific effect
-            // tank_on_collision(&tank, &car);
-            // car_on_collision(&car, &tank);
+        flame->active = moving;
+
+	toggle_mount_with_key(turret, tank, "main_weapon", SDL_SCANCODE_T, &turret_mounted, &turret_toggle_pressed, &turret_remount_cooldown, 0.5f, FIXED_DT);
+
+	rotate_within_limits(turret, tank, keystate, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
+                     -90, 90, 180.0f, FIXED_DT, "main_weapon");
+
+        // ---- Physics ----
+        if (turret_remount_cooldown > 0.0f) {
+            turret_remount_cooldown -= FIXED_DT;
+            if (turret_remount_cooldown < 0.0f)
+                turret_remount_cooldown = 0.0f;
         }
 	
-	const Uint8* keystate = SDL_GetKeyboardState(NULL);
-        tank_update(&tank, keystate, FIXED_DT);  // Controlled by player
-        car_update(&car, keystate);    // Same controls for now
+	entity_update(tank, keystate, FIXED_DT);
+        mount_update_all(tank, FIXED_DT);
+	entity_mount_update_all(tank, FIXED_DT);
 
-        SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
-        SDL_RenderClear(ren);
+        // ---- Rendering ----
+        SDL_SetRenderDrawColor(renderer, 10, 10, 10, 255);
+        SDL_RenderClear(renderer);
 
-        tank_render(ren, &tank);
-	car_render(ren, &car);
-
-	// debug_draw_mount_info(ren, debug_font, &tank);
-		
-        SDL_RenderPresent(ren);
+	entity_render(renderer, tank, tank->width, tank->height);
+	mount_render_all(renderer, tank);
+	entity_mount_render_all(renderer, tank);
+	if (flame->active)
+            render_animated_entity(renderer, flame, delta_ms);
+	
+        SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }
 
-    tank_unload(&tank);
-    car_unload(&car);
-    SDL_DestroyRenderer(ren);
-    SDL_DestroyWindow(win);
-    /* TTF_CloseFont(debug_font); */
-    /* TTF_Quit(); */
-    IMG_Quit();
-    SDL_Quit();
+    // ---- Cleanup ----
+    mount_system_cleanup_entities(tank);
+    shutdown_game(window, renderer, entities, entity_count);
     return 0;
 }
