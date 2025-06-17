@@ -10,10 +10,14 @@
 #include "behavior_helpers.h"
 #include "sdl_helpers.h"
 #include "mount_helpers.h"
+#include "bullet.h"
 
 #define WINDOW_WIDTH  1000
 #define WINDOW_HEIGHT 750
 #define FIXED_DT (1.0f / 60.0f)
+bool space_pressed = false;
+float shoot_cooldown = 0.0f;
+const float SHOOT_COOLDOWN_TIME = 0.2f; // 200ms between shots
 
 int main() {
     SDL_Window* window = NULL;
@@ -22,24 +26,23 @@ int main() {
 
     Entity* entities[4];
     int entity_count = 0;
+    bullet_system_init();
 
     // ---- Tank Setup ----
     REGISTER_ENTITY(tank, spawn_entity("tank1", renderer, "assets/tank.png", 100, 100));
-
+    
     // Initialize mount system for tank
-    mount_system_init(tank, 4);  // 4 mount points
-    // Added by Claude AI
-    mount_system_init_with_entities(tank, 0, 4);  // 4 entity mounts
-
+    mount_system_init(tank, 4);
+    
     // ---- Turret Setup ----
     REGISTER_ENTITY(turret, spawn_entity("turret1", renderer, "assets/turret.png", 0, 0));
     turret->is_animated = false;  // Make sure this flag exists
-    register_entity_mount_and_attach(tank, "main_weapon", 0, 40, 50, 0.0f, true, 0.0f, turret);
-    
+    register_mount_and_attach(tank, "main_weapon", -1, 40, 50, 0.0f, true, 0.0f, turret);
+
     // Exhaust Flame Component
-    REGISTER_ANIMATED_ENTITY(flame, spawn_animated_entity("exhaust_flame", renderer, "assets/exhaust-flame", 4, 0, 0));
-    register_entity_mount_and_attach(tank, "exhaust_flame", 1, -90, 0, 0.0f, true, 0.0f, flame);
-    
+    REGISTER_ANIMATED_ENTITY(flame, spawn_animated_entity("flame1", renderer, "assets/exhaust-flame", 4, 0, 0));
+    register_mount_and_attach(tank, "exhaust_flame", -1, -90, 0, 0.0f, true, 0.0f, flame);
+
     // ---- Main Loop ----
     bool running = true;
     bool turret_mounted = true;
@@ -73,6 +76,33 @@ int main() {
 	rotate_within_limits(turret, tank, keystate, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
                      -90, 90, 180.0f, FIXED_DT, "main_weapon");
 
+	// bullet shoot
+	shoot_cooldown -= FIXED_DT;
+        if (shoot_cooldown < 0.0f) shoot_cooldown = 0.0f;
+
+        if (keystate[SDL_SCANCODE_SPACE] && !space_pressed && shoot_cooldown <= 0.0f && turret_mounted) {
+            space_pressed = true;
+    
+            // Get turret world position and angle
+            float turret_x, turret_y, turret_angle;
+            mount_get_world_position(tank, "main_weapon", &turret_x, &turret_y, &turret_angle);
+    
+            // Calculate bullet spawn position (slightly in front of turret)
+            float spawn_distance = 30.0f; // Distance in front of turret
+            float angle_rad = turret_angle * (M_PI / 180.0f);
+            float bullet_x = turret_x + cosf(angle_rad) * spawn_distance;
+            float bullet_y = turret_y + sinf(angle_rad) * spawn_distance;
+    
+            // Spawn bullet
+            spawn_bullet(renderer, bullet_x, bullet_y, turret_angle, 400.0f);
+    
+            shoot_cooldown = SHOOT_COOLDOWN_TIME;
+        }
+
+        if (!keystate[SDL_SCANCODE_SPACE]) {
+            space_pressed = false;
+        }
+
         // ---- Physics ----
         if (turret_remount_cooldown > 0.0f) {
             turret_remount_cooldown -= FIXED_DT;
@@ -81,8 +111,8 @@ int main() {
         }
 	
 	entity_update(tank, keystate, FIXED_DT);
-        mount_update_all(tank, FIXED_DT);
-	entity_mount_update_all(tank, FIXED_DT);
+	mount_update_all(tank, FIXED_DT);
+	update_all_bullets(FIXED_DT);
 
         // ---- Rendering ----
         SDL_SetRenderDrawColor(renderer, 10, 10, 10, 255);
@@ -90,7 +120,7 @@ int main() {
 
 	entity_render(renderer, tank, tank->width, tank->height);
 	mount_render_all(renderer, tank);
-	entity_mount_render_all(renderer, tank);
+	render_all_bullets(renderer);
 	if (flame->active)
             render_animated_entity(renderer, flame, delta_ms);
 	
@@ -99,7 +129,8 @@ int main() {
     }
 
     // ---- Cleanup ----
-    mount_system_cleanup_entities(tank);
+    mount_system_cleanup(tank);
+    cleanup_bullet_system();
     shutdown_game(window, renderer, entities, entity_count);
     return 0;
 }

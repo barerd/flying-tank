@@ -63,14 +63,14 @@ void toggle_mount_with_key(
         if (*mounted_flag) {
             entity_set_position(child, parent->x + 40, parent->y);
             child->active = true;
-            mount_detach_entity(parent, mount_name);
+            mount_detach(parent, mount_name);
             *mounted_flag = false;
             *cooldown = cooldown_duration;
         } else if (*cooldown <= 0.0f) {
             float x, y, angle;
             mount_get_world_position(parent, mount_name, &x, &y, &angle);
             entity_set_position(child, x, y);
-            mount_attach_entity(parent, mount_name, child);
+            mount_attach(parent, mount_name, child);
             child->active = true;
             *mounted_flag = true;
         }

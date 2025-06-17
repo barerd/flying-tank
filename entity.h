@@ -21,20 +21,17 @@ typedef struct Entity {
     float frame_delay_ms;       // Delay per frame in ms
     bool is_animated;
 
-    // Mount system
-    MountPoint* mount_points;   // Array of mount points
-    int mount_count;            // Number of mount points
-    MountedComponent** mounted_components;  // Array of component lists (one per mount)
     // Optional per-entity logic (e.g., AI)
     void (*update)(struct Entity*, float dt);
 
     // Added by Claude AI
-    EntityMount* entity_mounts;
+    MountPoint* mount_points;
     Entity** mounted_entities;
     int entity_mount_count;
 } Entity;
 
 // Lifecycle
+extern Entity entities[];
 Entity* entity_create(float x, float y, int width, int height);
 Entity* spawn_entity(const char* id, SDL_Renderer* renderer, const char* texture_path, float x, float y);
 Entity* find_entity(const char* name);

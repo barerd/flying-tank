@@ -5,7 +5,7 @@
 
 #define MAX_ENTITIES 128
 
-static Entity entities[MAX_ENTITIES];
+Entity entities[MAX_ENTITIES];
 static const char* entity_names[MAX_ENTITIES];
 static int entity_count = 0;
 
@@ -89,9 +89,19 @@ void entity_thrust(Entity* e, float amount) {
 }
 
 void entity_update(Entity* e, const Uint8* keystate, float dt) {
-  (void)keystate;   // Şimdilik ignore ediyoruz
+    (void)keystate;  // Currently unused
 
-    // Friction
+    if (!e) return;
+
+    // Defensive: avoid updating unloaded or malformed entities
+    if (e->update) {
+        e->update(e, dt);
+    }
+
+    // Skip physics for destroyed or non-movable entities
+    if (e->friction == 0 && e->max_speed == 0 && e->speed == 0) return;
+
+    // Apply friction
     if (e->speed > 0) {
         e->speed -= e->friction * dt;
         if (e->speed < 0) e->speed = 0;
@@ -100,17 +110,41 @@ void entity_update(Entity* e, const Uint8* keystate, float dt) {
         if (e->speed > 0) e->speed = 0;
     }
 
-    // Clamp
+    // Clamp to max speed limits
     if (e->speed > e->max_speed)
         e->speed = e->max_speed;
     if (e->speed < -e->max_speed)
         e->speed = -e->max_speed;
 
-    // Move based on angle
+    // Integrate position using angle and speed
     float rad = e->angle * (float)(M_PI / 180.0f);
     e->x += cosf(rad) * e->speed * dt;
     e->y += sinf(rad) * e->speed * dt;
 }
+
+/* void entity_update(Entity* e, const Uint8* keystate, float dt) { */
+/*     (void)keystate;   // Şimdilik ignore ediyoruz */
+
+/*     // Friction */
+/*     if (e->speed > 0) { */
+/*         e->speed -= e->friction * dt; */
+/*         if (e->speed < 0) e->speed = 0; */
+/*     } else if (e->speed < 0) { */
+/*         e->speed += e->friction * dt; */
+/*         if (e->speed > 0) e->speed = 0; */
+/*     } */
+
+/*     // Clamp */
+/*     if (e->speed > e->max_speed) */
+/*         e->speed = e->max_speed; */
+/*     if (e->speed < -e->max_speed) */
+/*         e->speed = -e->max_speed; */
+
+/*     // Move based on angle */
+/*     float rad = e->angle * (float)(M_PI / 180.0f); */
+/*     e->x += cosf(rad) * e->speed * dt; */
+/*     e->y += sinf(rad) * e->speed * dt; */
+/* } */
 
 void entity_render(SDL_Renderer* renderer, const Entity* e, int width, int height) {
     if (!e->active) return;
@@ -124,8 +158,6 @@ void entity_render(SDL_Renderer* renderer, const Entity* e, int width, int heigh
     // For center-based rotation, we don't need to specify a center point
     // SDL will rotate around the center of the destination rectangle
     SDL_RenderCopyEx(renderer, e->texture, NULL, &dst, e->angle, NULL, SDL_FLIP_NONE);
-
-    mount_render_all(renderer, e);
 }
 
 bool entity_check_collision(Entity* a, Entity* b, int w_a, int h_a, int w_b, int h_b) {
@@ -179,8 +211,8 @@ Entity* entity_create(float x, float y, int width, int height) {
 
     e->texture = NULL;
     e->mount_points = NULL;
-    e->mount_count = 0;
-    e->mounted_components = NULL;
+    e->mounted_entities = NULL;
+    e->entity_mount_count = 0;
 
     e->update = NULL;  // Optional logic
 
@@ -190,26 +222,37 @@ Entity* entity_create(float x, float y, int width, int height) {
 void entity_destroy(Entity* e) {
     if (!e) return;
 
-        if (e->mount_points) {
-        for (int i = 0; i < e->mount_count; i++) {
-            free((void*)e->mount_points[i].name);
-            free(e->mount_points[i].offsets);
-
-            MountedComponent* comp = e->mounted_components[i];
-            while (comp) {
-                MountedComponent* next = comp->next;
-                if (comp->destroy) comp->destroy(comp);
-                free(comp);
-                comp = next;
+    if (e >= entities && e < entities + MAX_ENTITIES) {
+        entity_unload(e);
+        return;
+    }
+    
+    // Clean up entity mounting system
+    if (e->mount_points) {
+        for (int i = 0; i < e->entity_mount_count; i++) {
+            if (e->mount_points[i].name) {
+                free(e->mount_points[i].name);
+            }
+            if (e->mount_points[i].offsets) {
+                free(e->mount_points[i].offsets);
             }
         }
-
         free(e->mount_points);
-        free(e->mounted_components);
+        free(e->mounted_entities);
         e->mount_points = NULL;
-        e->mounted_components = NULL;
-        e->mount_count = 0;
+        e->mounted_entities = NULL;
+        e->entity_mount_count = 0;
     }
+
+    // Clean up other resources
+    if (e->texture) {
+        SDL_DestroyTexture(e->texture);
+    }
+    if (e->id) {
+        free(e->id);
+    }
+    
+    free(e);
 }
 
 void entity_set_position(Entity* e, float x, float y) {

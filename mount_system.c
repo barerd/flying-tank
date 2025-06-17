@@ -6,56 +6,90 @@
 #include "entity_render_helpers.h"
 #include <SDL_log.h>
 
-void mount_system_init(Entity* entity, int mount_count) {
-    entity->mount_points = calloc(mount_count, sizeof(MountPoint));
-    entity->mounted_components = calloc(mount_count, sizeof(MountedComponent*));
-    entity->mount_count = mount_count;
+MountOffset* mount_create_offset_table(int count) {
+    return calloc(count, sizeof(MountOffset));
 }
 
-void mount_system_cleanup(Entity* entity) {
-    if (!entity->mount_points) return;
-    
-    // Clean up all mounted components
-    for (int i = 0; i < entity->mount_count; i++) {
-        MountedComponent* comp = entity->mounted_components[i];
-        while (comp) {
-            MountedComponent* next = comp->next;
-            if (comp->destroy) comp->destroy(comp);
-            free(comp);
-            comp = next;
+void mount_set_offset(MountOffset* offsets, int index, float angle, float offset_x, float offset_y) {
+    offsets[index].angle = angle;
+    offsets[index].offset_x = offset_x;
+    offsets[index].offset_y = offset_y;
+}
+
+void mount_system_init(Entity* entity, int mount_count) {
+    entity->mount_points = calloc(mount_count, sizeof(MountPoint));
+    entity->mounted_entities = calloc(mount_count, sizeof(Entity*));  // <-- this line was missing
+    entity->entity_mount_count = mount_count;
+}
+
+void mount_system_cleanup(Entity* entity) {    
+    // Cleanup entity mounts (new)
+    if (entity->mount_points) {
+        for (int i = 0; i < entity->entity_mount_count; i++) {
+            if (entity->mount_points[i].name) {
+                free(entity->mount_points[i].name);
+            }
+            if (entity->mount_points[i].offsets) {
+                free(entity->mount_points[i].offsets);
+            }
         }
-        
-        // Free offset tables
-        if (entity->mount_points[i].offsets) {
-            free(entity->mount_points[i].offsets);
-        }
+        free(entity->mount_points);
+        free(entity->mounted_entities);
+        entity->mount_points = NULL;
+        entity->mounted_entities = NULL;
+        entity->entity_mount_count = 0;
     }
-    
-    free(entity->mount_points);
-    free(entity->mounted_components);
-    entity->mount_points = NULL;
-    entity->mounted_components = NULL;
-    entity->mount_count = 0;
 }
 
 int mount_add_point(Entity* entity, const char* name, MountOffset* offsets, int offset_count,
-                   bool inherit_rotation, float rotation_offset) {
-    
-    // Find empty slot
-    for (int i = 0; i < entity->mount_count; i++) {
-        if (!entity->mount_points[i].name) {
-            entity->mount_points[i].name = strdup(name);
-            entity->mount_points[i].offsets = offsets;
-            entity->mount_points[i].offset_count = offset_count;
-            entity->mount_points[i].inherit_rotation = inherit_rotation;
-            entity->mount_points[i].rotation_offset = rotation_offset;
-            return i;
+                    bool inherit_rotation, float rotation_offset, int slot_index) {
+    if (!entity || !entity->mount_points || !entity->mounted_entities) return -1;
+
+    // If -1, find a free slot
+    if (slot_index == -1) {
+        for (int i = 0; i < entity->entity_mount_count; i++) {
+            if (!entity->mount_points[i].name) {
+                slot_index = i;
+                break;
+            }
         }
     }
-    return -1; // No free slots
+
+    if (slot_index < 0 || slot_index >= entity->entity_mount_count) {
+        SDL_Log("FATAL: Invalid or no available mount slot!");
+        return -1;
+    }
+
+    if (entity->mount_points[slot_index].name) {
+        SDL_Log("FATAL: Slot %d already occupied!", slot_index);
+        return -1;
+    }
+
+    entity->mount_points[slot_index].name = strdup(name);
+    entity->mount_points[slot_index].offsets = offsets;
+    entity->mount_points[slot_index].offset_count = offset_count;
+    entity->mount_points[slot_index].inherit_rotation = inherit_rotation;
+    entity->mount_points[slot_index].rotation_offset = rotation_offset;
+
+    return slot_index;
 }
 
-// Helper to interpolate between offset entries based on angle
+/* int mount_add_point(Entity* entity, const char* name, MountOffset* offsets, int offset_count, */
+/*                           bool inherit_rotation, float rotation_offset) { */
+/*     // Find empty slot */
+/*     for (int i = 0; i < entity->entity_mount_count; i++) { */
+/*         if (!entity->mount_points[i].name) { */
+/*             entity->mount_points[i].name = strdup(name); */
+/*             entity->mount_points[i].offsets = offsets; */
+/*             entity->mount_points[i].offset_count = offset_count; */
+/*             entity->mount_points[i].inherit_rotation = inherit_rotation; */
+/*             entity->mount_points[i].rotation_offset = rotation_offset; */
+/*             return i; */
+/*         } */
+/*     } */
+/*     return -1; // No free slots */
+/* } */
+
 void interpolate_mount_offset(MountPoint* mount, float angle, float* out_x, float* out_y) {
     if (mount->offset_count == 0) {
         *out_x = *out_y = 0;
@@ -83,324 +117,13 @@ void interpolate_mount_offset(MountPoint* mount, float angle, float* out_x, floa
     *out_y = mount->offsets[lower].offset_y;
 }
 
-void mount_get_world_position(const Entity* entity, const char* mount_name, float* out_x, float* out_y, float* out_angle) {
-    // Find mount point
-    MountPoint* mount = NULL;
-    for (int i = 0; i < entity->mount_count; i++) {
-        if (entity->mount_points[i].name && strcmp(entity->mount_points[i].name, mount_name) == 0) {
-            mount = &entity->mount_points[i];
-            break;
-        }
-    }
-    
-    if (!mount) {
-        *out_x = entity->x;
-        *out_y = entity->y;
-        *out_angle = entity->angle;
-        return;
-    }
-    
-    // Get offset for current angle
-    float offset_x, offset_y;
-    interpolate_mount_offset(mount, entity->angle, &offset_x, &offset_y);
-    
-    // Transform to world coordinates
-    float angle_rad = entity->angle * (M_PI / 180.0f);
-    float cos_a = cosf(angle_rad);
-    float sin_a = sinf(angle_rad);
-    
-    *out_x = entity->x + (offset_x * cos_a - offset_y * sin_a);
-    *out_y = entity->y + (offset_x * sin_a + offset_y * cos_a);
- 
-    if (mount->inherit_rotation) {
-        *out_angle = entity->angle + mount->rotation_offset;
-    } else {
-        *out_angle = mount->rotation_offset;
-    }
-}
-
-// --- Animation component methods ---
-
-void animation_component_update(MountedComponent* comp, float dt) {
-    (void)dt;
-    Uint32 now = SDL_GetTicks();
-    if (now - comp->data.animation.last_update >= comp->data.animation.frame_delay) {
-        comp->data.animation.current_frame = (comp->data.animation.current_frame + 1) % comp->data.animation.frame_count;
-        comp->data.animation.last_update = now;
-    }
-}
-
-void animation_component_render(SDL_Renderer* renderer, MountedComponent* comp, float x, float y, float angle) {
-    if (!comp->active) return;
-
-    SDL_Texture* frame = comp->data.animation.frames[comp->data.animation.current_frame];
-    if (!frame) return;
-
-    SDL_Rect dst = {
-        (int)(x - comp->data.animation.width / 2),
-        (int)(y - comp->data.animation.height / 2),
-        comp->data.animation.width,
-        comp->data.animation.height
-    };
-
-    SDL_RenderCopyEx(renderer, frame, NULL, &dst, angle + comp->local_angle, NULL, SDL_FLIP_NONE);
-}
-
-void animation_component_destroy(MountedComponent* comp) {
-    free((void*)comp->type);
-}
-
-
-// --- Sprite component methods ---
-
-void sprite_component_update(MountedComponent* comp, float dt) {
-    // Static sprite, nothing to update
-    (void)comp;
-    (void)dt;
-}
-
-void sprite_component_render(SDL_Renderer* renderer, MountedComponent* comp, float x, float y, float angle) {
-    if (!comp->active || !comp->data.sprite.texture) return;
-
-    SDL_Rect dst = {
-        (int)(x - comp->data.sprite.width / 2),
-        (int)(y - comp->data.sprite.height / 2),
-        comp->data.sprite.width,
-        comp->data.sprite.height
-    };
-
-    SDL_RenderCopyEx(renderer, comp->data.sprite.texture, NULL, &dst, angle + comp->local_angle, NULL, SDL_FLIP_NONE);
-}
-
-void sprite_component_destroy(MountedComponent* comp) {
-    free((void*)comp->type);
-}
-
-// --- Component creation ---
-
-MountedComponent* mount_create_animation_component(const char* type, SDL_Texture** frames,
-                                                   int frame_count, int width, int height, Uint32 frame_delay) {
-    MountedComponent* comp = calloc(1, sizeof(MountedComponent));
-    comp->type = strdup(type);
-    comp->data.animation.frames = frames;
-    comp->data.animation.frame_count = frame_count;
-    comp->data.animation.current_frame = 0;
-    comp->data.animation.frame_delay = frame_delay;
-    comp->data.animation.last_update = SDL_GetTicks();
-    comp->data.animation.width = width;
-    comp->data.animation.height = height;
-    comp->active = true;
-    comp->local_angle = 0;
-
-    comp->update = animation_component_update;
-    comp->render = animation_component_render;
-    comp->destroy = animation_component_destroy;
-
-    return comp;
-}
-
-MountedComponent* mount_create_sprite_component(const char* type, SDL_Texture* texture,
-                                                int width, int height) {
-    MountedComponent* comp = calloc(1, sizeof(MountedComponent));
-    comp->type = strdup(type);
-    comp->data.sprite.texture = texture;
-    comp->data.sprite.width = width;
-    comp->data.sprite.height = height;
-    comp->active = true;
-    comp->local_angle = 0;
-
-    comp->update = sprite_component_update;
-    comp->render = sprite_component_render;
-    comp->destroy = sprite_component_destroy;
-
-    return comp;
-}
-
-bool mount_attach_component(Entity* entity, const char* mount_name, MountedComponent* component) {
-    int mount_index = -1;
-    for (int i = 0; i < entity->mount_count; i++) {
-        if (entity->mount_points[i].name && strcmp(entity->mount_points[i].name, mount_name) == 0) {
-            mount_index = i;
-            break;
-        }
-    }
-
-    if (mount_index == -1) return false;
-
-    component->next = entity->mounted_components[mount_index];
-    entity->mounted_components[mount_index] = component;
-    return true;
-}
-
-void mount_update_all(Entity* entity, float dt) {
-    for (int i = 0; i < entity->mount_count; i++) {
-        MountedComponent* comp = entity->mounted_components[i];
-        while (comp) {
-            if (comp->update && comp->active)
-                comp->update(comp, dt);
-            comp = comp->next;
-        }
-    }
-}
-
-void mount_render_all(SDL_Renderer* renderer, const Entity* entity) {
-    for (int i = 0; i < entity->mount_count; i++) {
-        if (!entity->mount_points[i].name) continue;
-
-        float x, y, angle;
-        mount_get_world_position(entity, entity->mount_points[i].name, &x, &y, &angle);
-	
-        MountedComponent* comp = entity->mounted_components[i];
-        while (comp) {
-            if (comp->render && comp->active)
-                comp->render(renderer, comp, x, y, angle);
-            comp = comp->next;
-        }
-    }
-}
-
-// --- Offset utilities ---
-
-MountOffset* mount_create_offset_table(int count) {
-    return calloc(count, sizeof(MountOffset));
-}
-
-void mount_set_offset(MountOffset* table, int index, float angle, float offset_x, float offset_y) {
-    table[index].angle = angle;
-    table[index].offset_x = offset_x;
-    table[index].offset_y = offset_y;
-}
-
-static void mounted_entity_update(MountedComponent* comp, float dt) {
-    if (!comp->active || !comp->data.entity || !comp->data.entity->active) return;
-    entity_update(comp->data.entity, NULL, dt);  // NULL = no input
-    mount_update_all(comp->data.entity, dt);
-}
-
-static void mounted_entity_render(SDL_Renderer* renderer, MountedComponent* comp, float x, float y, float angle) {
-    if (!comp->active || !comp->data.entity || !comp->data.entity->active) return;
-    Entity* e = comp->data.entity;
-    e->x = x;
-    e->y = y;
-    e->angle = angle;
-    // Check if it's an animated entity by name or type
-    if (strstr(e->id, "flame") || strstr(e->id, "animated") || e->is_animated) {
-        // You'll need to pass proper delta time - this is a limitation
-        render_animated_entity(renderer, e, 16.0f); // approximate delta
-    } else {
-        entity_render(renderer, e, e->width, e->height);
-    }
-}
-
-bool mount_attach_entity(Entity* parent, const char* mount_name, Entity* child) {
-    int mount_index = -1;
-    for (int i = 0; i < parent->mount_count; i++) {
-        if (parent->mount_points[i].name && strcmp(parent->mount_points[i].name, mount_name) == 0) {
-            mount_index = i;
-            break;
-        }
-    }
-
-    if (mount_index == -1) return false;
-
-    // Wrap the child entity inside a MountedComponent
-    MountedComponent* comp = calloc(1, sizeof(MountedComponent));
-    comp->type = strdup("entity");
-    comp->active = true;
-    comp->local_angle = 0;
-    comp->data.entity = child;
-    comp->render = mounted_entity_render;
-    comp->update = mounted_entity_update;
-    comp->destroy = sprite_component_destroy;
-
-    // Attach to mount point
-    comp->next = parent->mounted_components[mount_index];
-    parent->mounted_components[mount_index] = comp;
-
-    return true;
-}
-
-bool mount_detach_entity(Entity* parent, const char* mount_name) {
-    for (int i = 0; i < parent->mount_count; ++i) {
-        if (parent->mount_points[i].name && strcmp(parent->mount_points[i].name, mount_name) == 0) {
-            MountedComponent** comp_ptr = &parent->mounted_components[i];
-            while (*comp_ptr) {
-                MountedComponent* comp = *comp_ptr;
-                if (strcmp(comp->type, "entity") == 0) {
-                    *comp_ptr = comp->next;
-                    if (comp->destroy) comp->destroy(comp);
-                    free(comp);
-                    return true;
-                }
-                comp_ptr = &(*comp_ptr)->next;
-            }
-        }
-    }
-    return false;
-}
-
-// Added by Claude AI
-void mount_system_init_with_entities(Entity* entity, int component_mounts, int entity_mounts) {
-    // Initialize component mounts (existing)
-    if (component_mounts > 0) {
-        entity->mount_points = calloc(component_mounts, sizeof(MountPoint));
-        entity->mounted_components = calloc(component_mounts, sizeof(MountedComponent*));
-        entity->mount_count = component_mounts;
-    }
-    
-    // Initialize entity mounts (new)
-    if (entity_mounts > 0) {
-        entity->entity_mounts = calloc(entity_mounts, sizeof(EntityMount));
-        entity->mounted_entities = calloc(entity_mounts, sizeof(Entity*));
-        entity->entity_mount_count = entity_mounts;
-    }
-}
-
-void mount_system_cleanup_entities(Entity* entity) {
-    // Cleanup component mounts (existing)
-    mount_system_cleanup(entity);
-    
-    // Cleanup entity mounts (new)
-    if (entity->entity_mounts) {
-        for (int i = 0; i < entity->entity_mount_count; i++) {
-            if (entity->entity_mounts[i].name) {
-                free(entity->entity_mounts[i].name);
-            }
-            if (entity->entity_mounts[i].offsets) {
-                free(entity->entity_mounts[i].offsets);
-            }
-        }
-        free(entity->entity_mounts);
-        free(entity->mounted_entities);
-        entity->entity_mounts = NULL;
-        entity->mounted_entities = NULL;
-        entity->entity_mount_count = 0;
-    }
-}
-
-int entity_mount_add_point(Entity* entity, const char* name, MountOffset* offsets, int offset_count,
-                          bool inherit_rotation, float rotation_offset) {
-    // Find empty slot
-    for (int i = 0; i < entity->entity_mount_count; i++) {
-        if (!entity->entity_mounts[i].name) {
-            entity->entity_mounts[i].name = strdup(name);
-            entity->entity_mounts[i].offsets = offsets;
-            entity->entity_mounts[i].offset_count = offset_count;
-            entity->entity_mounts[i].inherit_rotation = inherit_rotation;
-            entity->entity_mounts[i].rotation_offset = rotation_offset;
-            return i;
-        }
-    }
-    return -1; // No free slots
-}
-
-void entity_mount_get_world_position(const Entity* entity, const char* mount_name, 
+void mount_get_world_position(const Entity* entity, const char* mount_name, 
                                    float* out_x, float* out_y, float* out_angle) {
     // Find entity mount point
-    EntityMount* mount = NULL;
+    MountPoint* mount = NULL;
     for (int i = 0; i < entity->entity_mount_count; i++) {
-        if (entity->entity_mounts[i].name && strcmp(entity->entity_mounts[i].name, mount_name) == 0) {
-            mount = &entity->entity_mounts[i];
+        if (entity->mount_points[i].name && strcmp(entity->mount_points[i].name, mount_name) == 0) {
+            mount = &entity->mount_points[i];
             break;
         }
     }
@@ -451,10 +174,10 @@ void entity_mount_get_world_position(const Entity* entity, const char* mount_nam
     }
 }
 
-bool entity_mount_attach(Entity* parent, const char* mount_name, Entity* child) {
+bool mount_attach(Entity* parent, const char* mount_name, Entity* child) {
     int mount_index = -1;
     for (int i = 0; i < parent->entity_mount_count; i++) {
-        if (parent->entity_mounts[i].name && strcmp(parent->entity_mounts[i].name, mount_name) == 0) {
+        if (parent->mount_points[i].name && strcmp(parent->mount_points[i].name, mount_name) == 0) {
             mount_index = i;
             break;
         }
@@ -470,9 +193,9 @@ bool entity_mount_attach(Entity* parent, const char* mount_name, Entity* child) 
     return true;
 }
 
-bool entity_mount_detach(Entity* parent, const char* mount_name) {
+bool mount_detach(Entity* parent, const char* mount_name) {
     for (int i = 0; i < parent->entity_mount_count; i++) {
-        if (parent->entity_mounts[i].name && strcmp(parent->entity_mounts[i].name, mount_name) == 0) {
+        if (parent->mount_points[i].name && strcmp(parent->mount_points[i].name, mount_name) == 0) {
             parent->mounted_entities[i] = NULL;
             return true;
         }
@@ -480,13 +203,13 @@ bool entity_mount_detach(Entity* parent, const char* mount_name) {
     return false;
 }
 
-void entity_mount_update_all(Entity* entity, float dt) {
+void mount_update_all(Entity* entity, float dt) {
     for (int i = 0; i < entity->entity_mount_count; i++) {
         Entity* mounted = entity->mounted_entities[i];
         if (mounted && mounted->active) {
             // Update mounted entity position
             float x, y, angle;
-            entity_mount_get_world_position(entity, entity->entity_mounts[i].name, &x, &y, &angle);
+            mount_get_world_position(entity, entity->mount_points[i].name, &x, &y, &angle);
             mounted->x = x;
             mounted->y = y;
             mounted->angle = angle;
@@ -496,12 +219,11 @@ void entity_mount_update_all(Entity* entity, float dt) {
             
             // Recursively update its mounts
             mount_update_all(mounted, dt);
-            entity_mount_update_all(mounted, dt);
         }
     }
 }
 
-void entity_mount_render_all(SDL_Renderer* renderer, const Entity* entity) {
+void mount_render_all(SDL_Renderer* renderer, const Entity* entity) {
     for (int i = 0; i < entity->entity_mount_count; i++) {
         Entity* mounted = entity->mounted_entities[i];
         if (mounted && mounted->active) {
@@ -518,7 +240,6 @@ void entity_mount_render_all(SDL_Renderer* renderer, const Entity* entity) {
             
             // Recursively render its mounts
             mount_render_all(renderer, mounted);
-            entity_mount_render_all(renderer, mounted);
         }
     }
 }
