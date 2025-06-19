@@ -4,6 +4,6 @@
 #include "entity.h"
 #include <SDL.h>
 
-void render_animated_entity(SDL_Renderer* renderer, Entity* e, float delta_ms);
+void render_animated_entity(SDL_Renderer* renderer, AnimatedEntity* ae, float delta_ms);
 
 #endif

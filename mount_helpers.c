@@ -31,37 +31,15 @@ bool register_mount_and_attach(Entity* parent, const char* mount_name, int slot_
     return ok;
 }
 
-/* // Added by Claude AI */
-/* void register_mount_and_attach( */
-/*     Entity* parent, */
-/*     const char* mount_name, */
-/*     int slot_index, */
-/*     float offset_x, */
-/*     float offset_y, */
-/*     float offset_angle, */
-/*     bool rotate_with_parent, */
-/*     float default_rotation, */
-/*     Entity* child */
-/* ) { */
-/*     // Create offset table */
-/*     MountOffset* offsets = mount_create_offset_table(1); */
-/*     mount_set_offset(offsets, slot_index, offset_angle, offset_x, offset_y); */
-    
-/*     // Add entity mount point */
-/*     mount_add_point(parent, mount_name, offsets, 1, rotate_with_parent, default_rotation); */
-    
-/*     // Position child at mount point */
-/*     float world_x, world_y, world_angle; */
-/*     mount_get_world_position(parent, mount_name, &world_x, &world_y, &world_angle); */
-/*     entity_set_position(child, world_x, world_y); */
-/*     child->angle = world_angle; */
-    
-/*     // Attach child */
-/*     bool ok = mount_attach(parent, mount_name, child); */
-/*     if (!ok) { */
-/*         SDL_Log("ERROR: mount_point_attach failed for %s", mount_name); */
-/*     } */
-/* } */
+bool register_mount_and_attach_animated(Entity* parent, const char* mount_name, int slot_index,
+                                       float offset_x, float offset_y, float offset_angle,
+                                       bool rotate_with_parent, float default_rotation,
+                                       AnimatedEntity* child) {
+    // Simply call the original function with a cast
+    return register_mount_and_attach(parent, mount_name, slot_index, offset_x, offset_y, 
+                                   offset_angle, rotate_with_parent, default_rotation, 
+                                   (Entity*)child);
+}
 
 Entity* get_mounted_entity(Entity* parent, const char* mount_name) {
     for (int i = 0; i < parent->entity_mount_count; i++) {

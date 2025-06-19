@@ -122,30 +122,6 @@ void entity_update(Entity* e, const Uint8* keystate, float dt) {
     e->y += sinf(rad) * e->speed * dt;
 }
 
-/* void entity_update(Entity* e, const Uint8* keystate, float dt) { */
-/*     (void)keystate;   // Şimdilik ignore ediyoruz */
-
-/*     // Friction */
-/*     if (e->speed > 0) { */
-/*         e->speed -= e->friction * dt; */
-/*         if (e->speed < 0) e->speed = 0; */
-/*     } else if (e->speed < 0) { */
-/*         e->speed += e->friction * dt; */
-/*         if (e->speed > 0) e->speed = 0; */
-/*     } */
-
-/*     // Clamp */
-/*     if (e->speed > e->max_speed) */
-/*         e->speed = e->max_speed; */
-/*     if (e->speed < -e->max_speed) */
-/*         e->speed = -e->max_speed; */
-
-/*     // Move based on angle */
-/*     float rad = e->angle * (float)(M_PI / 180.0f); */
-/*     e->x += cosf(rad) * e->speed * dt; */
-/*     e->y += sinf(rad) * e->speed * dt; */
-/* } */
-
 void entity_render(SDL_Renderer* renderer, const Entity* e, int width, int height) {
     if (!e->active) return;
 
@@ -170,6 +146,10 @@ bool entity_check_collision(Entity* a, Entity* b, int w_a, int h_a, int w_b, int
     SDL_Rect rect_a = { a_x, a_y, w_a, h_a };
     SDL_Rect rect_b = { b_x, b_y, w_b, h_b };
     return SDL_HasIntersection(&rect_a, &rect_b);
+}
+
+bool entity_check_collision_simple(Entity* a, Entity* b) {
+    return entity_check_collision(a, b, a->width, a->height, b->width, b->height);
 }
 
 void mount_to_world_coords(Entity* parent, MountPoint* mount, float* out_x, float* out_y) {

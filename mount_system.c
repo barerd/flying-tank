@@ -74,22 +74,6 @@ int mount_add_point(Entity* entity, const char* name, MountOffset* offsets, int 
     return slot_index;
 }
 
-/* int mount_add_point(Entity* entity, const char* name, MountOffset* offsets, int offset_count, */
-/*                           bool inherit_rotation, float rotation_offset) { */
-/*     // Find empty slot */
-/*     for (int i = 0; i < entity->entity_mount_count; i++) { */
-/*         if (!entity->mount_points[i].name) { */
-/*             entity->mount_points[i].name = strdup(name); */
-/*             entity->mount_points[i].offsets = offsets; */
-/*             entity->mount_points[i].offset_count = offset_count; */
-/*             entity->mount_points[i].inherit_rotation = inherit_rotation; */
-/*             entity->mount_points[i].rotation_offset = rotation_offset; */
-/*             return i; */
-/*         } */
-/*     } */
-/*     return -1; // No free slots */
-/* } */
-
 void interpolate_mount_offset(MountPoint* mount, float angle, float* out_x, float* out_y) {
     if (mount->offset_count == 0) {
         *out_x = *out_y = 0;
@@ -167,10 +151,18 @@ void mount_get_world_position(const Entity* entity, const char* mount_name,
     *out_x = entity->x + (offset_x * cos_a - offset_y * sin_a);
     *out_y = entity->y + (offset_x * sin_a + offset_y * cos_a);
     
+    /* if (mount->inherit_rotation) { */
+    /*     *out_angle = entity->angle + mount->rotation_offset; */
+    /* } else { */
+    /*     *out_angle = mount->rotation_offset; */
+    /* } */
     if (mount->inherit_rotation) {
-        *out_angle = entity->angle + mount->rotation_offset;
+        // Use the dynamic angle from offsets[0], not the static rotation_offset
+        float dynamic_angle = (mount->offset_count > 0) ? mount->offsets[0].angle : 0.0f;
+        *out_angle = entity->angle + mount->rotation_offset + dynamic_angle;
     } else {
-        *out_angle = mount->rotation_offset;
+        float dynamic_angle = (mount->offset_count > 0) ? mount->offsets[0].angle : 0.0f;
+        *out_angle = mount->rotation_offset + dynamic_angle;
     }
 }
 
@@ -227,20 +219,28 @@ void mount_render_all(SDL_Renderer* renderer, const Entity* entity) {
     for (int i = 0; i < entity->entity_mount_count; i++) {
         Entity* mounted = entity->mounted_entities[i];
         if (mounted && mounted->active) {
-            // Position was already set in update, just render
-            if (mounted->is_animated) {
+            if (mounted->type == ENTITY_ANIMATED) {
+                AnimatedEntity* anim_entity = (AnimatedEntity*)mounted;
                 static Uint32 last_time = 0;
                 Uint32 now = SDL_GetTicks();
                 float delta = (last_time == 0) ? 16.0f : (now - last_time);
                 last_time = now;
-                render_animated_entity(renderer, mounted, delta);
+                render_animated_entity(renderer, anim_entity, delta);  // Pass AnimatedEntity directly
             } else {
                 entity_render(renderer, mounted, mounted->width, mounted->height);
             }
             
-            // Recursively render its mounts
             mount_render_all(renderer, mounted);
         }
     }
 }
 
+// Returns a pointer to the MountPoint with the given name, or NULL if not found
+MountPoint* mount_get(Entity* parent, const char* name) {
+    for (int i = 0; i < parent->entity_mount_count; i++) {
+        if (strcmp(parent->mount_points[i].name, name) == 0) {
+            return &parent->mount_points[i];
+        }
+    }
+    return NULL;
+}

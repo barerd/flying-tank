@@ -4,6 +4,6 @@
 #include "entity.h"
 #include <SDL.h>
 
-Entity* spawn_animated_entity(const char* id, SDL_Renderer* renderer, const char* base_path, int frame_count, float x, float y);
+AnimatedEntity* spawn_animated_entity(const char* id, SDL_Renderer* renderer, const char* base_path, int frame_count, float x, float y);
 
 #endif

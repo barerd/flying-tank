@@ -13,7 +13,6 @@ typedef struct {
     float offset_y;
 } MountOffset;
 
-// Added by Claude AI
 typedef struct MountPoint {
     char* name;
     MountOffset* offsets;
@@ -37,5 +36,7 @@ void mount_get_world_position(const Entity* entity, const char* mount_name,
 				     float* out_x, float* out_y, float* out_angle);
 bool mount_attach(Entity* parent, const char* mount_name, Entity* child);
 bool mount_detach(Entity* parent, const char* mount_name);
+
+MountPoint* mount_get(Entity* parent, const char* name);
 
 #endif

@@ -5,7 +5,15 @@
 #include <stdbool.h>
 #include "mount_system.h"
 
+typedef enum {
+    ENTITY_BASIC,
+    ENTITY_ANIMATED, 
+    ENTITY_MOUNTABLE,
+    ENTITY_BULLET,
+} EntityType;
+
 typedef struct Entity {
+    EntityType type;
     char* id;
     float x, y;
     float angle;
@@ -14,21 +22,24 @@ typedef struct Entity {
     int width, height;
     bool active;
     SDL_Texture* texture;
-    SDL_Texture** frames;
-    int frame_count;            // Number of animation frames
-    int current_frame;          // Current animation frame
-    float frame_timer;          // Milliseconds elapsed in current frame
-    float frame_delay_ms;       // Delay per frame in ms
-    bool is_animated;
 
     // Optional per-entity logic (e.g., AI)
     void (*update)(struct Entity*, float dt);
 
-    // Added by Claude AI
     MountPoint* mount_points;
     Entity** mounted_entities;
     int entity_mount_count;
 } Entity;
+
+typedef struct {
+    Entity base;
+    SDL_Texture** frames;
+    int frame_count;
+    int current_frame;
+    float frame_timer;
+    float frame_delay_ms;
+    bool is_animated;
+} AnimatedEntity;
 
 // Lifecycle
 extern Entity entities[];
@@ -44,6 +55,7 @@ void entity_update(Entity* e, const Uint8* keystate, float dt);
 void entity_turn(Entity* e, float angle_delta);
 void entity_thrust(Entity* e, float amount);
 bool entity_check_collision(Entity* a, Entity* b, int w_a, int h_a, int w_b, int h_b);
+bool entity_check_collision_simple(Entity* a, Entity* b);
 
 // Render
 void entity_render(SDL_Renderer* renderer, const Entity* e, int width, int height);

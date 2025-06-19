@@ -11,6 +11,8 @@
 #include "sdl_helpers.h"
 #include "mount_helpers.h"
 #include "bullet.h"
+#include "hitbox_loader.h"
+#include "collision.h"
 
 #define WINDOW_WIDTH  1000
 #define WINDOW_HEIGHT 750
@@ -28,21 +30,44 @@ int main() {
     int entity_count = 0;
     bullet_system_init();
 
+    // 1. Load entities
+    // ---- Rock Setup ----
+    REGISTER_ENTITY(rock, spawn_entity("rock", renderer, "assets/rock.png", 800, 600));
+    
     // ---- Tank Setup ----
-    REGISTER_ENTITY(tank, spawn_entity("tank1", renderer, "assets/tank.png", 100, 100));
+    REGISTER_ENTITY(tank, spawn_entity("tank", renderer, "assets/tank.png", 100, 100));
     
     // Initialize mount system for tank
     mount_system_init(tank, 4);
     
     // ---- Turret Setup ----
-    REGISTER_ENTITY(turret, spawn_entity("turret1", renderer, "assets/turret.png", 0, 0));
-    turret->is_animated = false;  // Make sure this flag exists
+    REGISTER_ENTITY(turret, spawn_entity("turret", renderer, "assets/turret.png", 0, 0));
     register_mount_and_attach(tank, "main_weapon", -1, 40, 50, 0.0f, true, 0.0f, turret);
 
     // Exhaust Flame Component
-    REGISTER_ANIMATED_ENTITY(flame, spawn_animated_entity("flame1", renderer, "assets/exhaust-flame", 4, 0, 0));
-    register_mount_and_attach(tank, "exhaust_flame", -1, -90, 0, 0.0f, true, 0.0f, flame);
+    REGISTER_ANIMATED_ENTITY(flame, spawn_animated_entity("main_motor_flame", renderer, "assets/exhaust-flame", 4, 0, 0));
+    register_mount_and_attach_animated(tank, "exhaust_flame", -1, -90, 0, 0.0f, true, 0.0f, flame);
 
+    REGISTER_ANIMATED_ENTITY(right_burner, spawn_animated_entity("burner_right", renderer, "assets/burner", 16, 0, 0))
+    register_mount_and_attach_animated(tank, "right_burner", -1, -50, -78, 0.0f, true, 0.0f, right_burner);
+    REGISTER_ANIMATED_ENTITY(left_burner, spawn_animated_entity("burner_left", renderer, "assets/burner", 16, 0, 0))
+    register_mount_and_attach_animated(tank, "left_burner", -1, -50, +78, 0.0f, true, 0.0f, left_burner);  
+
+    Entity* all_entities[] = {
+    rock,
+    tank,
+    turret,
+    &flame->base,
+    &right_burner->base,
+    &left_burner->base};
+
+    entity_count = sizeof(all_entities) / sizeof(all_entities[0]);
+
+    // 2. Load hitboxes from anywhere inside hitboxes/
+    load_all_hitboxes("hitboxes", all_entities, entity_count);
+    debug_collision_info(tank);
+    debug_collision_info(rock);
+ 
     // ---- Main Loop ----
     bool running = true;
     bool turret_mounted = true;
@@ -63,18 +88,22 @@ int main() {
         }
 
         const Uint8* keystate = SDL_GetKeyboardState(NULL);
-	apply_thrust_turn(tank, keystate, SDL_SCANCODE_UP, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, tank->accel, 180, FIXED_DT);
+	apply_thrust_turn(tank, keystate, SDL_SCANCODE_UP, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, 1.0, 180, FIXED_DT);
+	apply_afterburner(tank, keystate, SDL_SCANCODE_Z, 8, FIXED_DT);
+	
+        bool moving = keystate[SDL_SCANCODE_UP];
+        bool afterburner_on= keystate[SDL_SCANCODE_Z];
+	bool turning_left  = keystate[SDL_SCANCODE_LEFT]; 
+        bool turning_right = keystate[SDL_SCANCODE_RIGHT];
 
-        bool moving = keystate[SDL_SCANCODE_UP] || 
-                      keystate[SDL_SCANCODE_LEFT] || 
-                      keystate[SDL_SCANCODE_RIGHT];
-
-        flame->active = moving;
+        flame->base.active = moving || afterburner_on;
+	left_burner->base.active  = turning_left || afterburner_on;
+	right_burner->base.active = turning_right || afterburner_on;
 
 	toggle_mount_with_key(turret, tank, "main_weapon", SDL_SCANCODE_T, &turret_mounted, &turret_toggle_pressed, &turret_remount_cooldown, 0.5f, FIXED_DT);
 
-	rotate_within_limits(turret, tank, keystate, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
-                     -90, 90, 180.0f, FIXED_DT, "main_weapon");
+	rotate_within_limits(tank, "main_weapon", keystate, SDL_SCANCODE_A, SDL_SCANCODE_D, -20, 20, 4.0f, FIXED_DT);
+        /* rotate_infinite(tank, "main_weapon", keystate, SDL_SCANCODE_A, SDL_SCANCODE_D, 1.0f, FIXED_DT); */
 
 	// bullet shoot
 	shoot_cooldown -= FIXED_DT;
@@ -109,21 +138,39 @@ int main() {
             if (turret_remount_cooldown < 0.0f)
                 turret_remount_cooldown = 0.0f;
         }
+
+        if (check_entities_collision(tank, rock)) {
+	    float change = tank->speed / 10;
+	    int limit   = (int)change;
+            tank->speed = -tank->speed * 0.2;
+	    tank->angle = tank->angle + (rand() % (limit + 1 - -limit) - -limit);
+        }
 	
 	entity_update(tank, keystate, FIXED_DT);
 	mount_update_all(tank, FIXED_DT);
 	update_all_bullets(FIXED_DT);
-
+	
         // ---- Rendering ----
         SDL_SetRenderDrawColor(renderer, 10, 10, 10, 255);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_RenderClear(renderer);
 
 	entity_render(renderer, tank, tank->width, tank->height);
+	entity_render(renderer, rock, rock->width, rock->height);
 	mount_render_all(renderer, tank);
 	render_all_bullets(renderer);
-	if (flame->active)
-            render_animated_entity(renderer, flame, delta_ms);
 	
+	if (flame->base.active)
+            render_animated_entity(renderer, flame, delta_ms);
+	if (left_burner->base.active)
+	    render_animated_entity(renderer, left_burner, delta_ms);
+	if (right_burner->base.active)
+	    render_animated_entity(renderer, right_burner, delta_ms);
+
+	// Debug polygon lines
+	SDL_SetRenderDrawColor(renderer, 10, 10, 10, 255);
+	draw_all_collision_polygons(renderer, all_entities, entity_count);
+
         SDL_RenderPresent(renderer);
         SDL_Delay(16);
     }

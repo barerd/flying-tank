@@ -15,4 +15,16 @@ bool register_mount_and_attach(
     Entity* child
 );
 
+bool register_mount_and_attach_animated(
+    Entity* parent,
+    const char* mount_name,
+    int slot_index,
+    float offset_x,
+    float offset_y,
+    float offset_angle,
+    bool rotate_with_parent,
+    float default_rotation,
+    AnimatedEntity* child
+);
+
 #endif

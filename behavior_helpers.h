@@ -26,6 +26,13 @@ void apply_thrust_turn_bidirectional(
     float turn_speed_deg_per_sec,
     float dt);
 
+void apply_afterburner(
+    Entity* e,
+    const Uint8* keystate,
+    SDL_Scancode key,
+    float thrust,
+    float dt);
+  
 void toggle_mount_with_key(
     Entity* child,
     Entity* parent,
@@ -38,25 +45,23 @@ void toggle_mount_with_key(
     float dt);
 
 void rotate_within_limits(
-    Entity* child,
     Entity* parent,
+    const char* mount_name,
     const Uint8* keystate,
     SDL_Scancode left_key,
     SDL_Scancode right_key,
     float min_rel_angle_deg,
     float max_rel_angle_deg,
     float rotation_speed_deg_per_sec,
-    float dt,
-    const char* mount_name
+    float dt
 );
 
 void rotate_infinite(
-    Entity* child,
     Entity* parent,
+    const char* mount_name,
     const Uint8* keystate,
     SDL_Scancode left_key,
     SDL_Scancode right_key,
     float rotation_speed_deg_per_sec,
-    float dt,
-    const char* mount_name
+    float dt
 );
